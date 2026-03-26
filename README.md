@@ -6,9 +6,9 @@ Engram developer ecosystem -- TypeScript SDK, structured logger, and write-ahead
 
 | Package | Description | Install |
 |---------|-------------|---------|
-| [`@engram/sdk`](./packages/sdk/) | TypeScript SDK for Engram Memory Server | `npm install @engram/sdk` |
-| [`@engram/logger`](./packages/logger/) | Structured logging with transport abstraction | `npm install @engram/logger` |
-| [`@engram/wal`](./packages/wal/) | Write-ahead log for crash recovery | `npm install @engram/wal` |
+| [`@centient/sdk`](./packages/sdk/) | TypeScript SDK for Engram Memory Server | `npm install @centient/sdk` |
+| [`@centient/logger`](./packages/logger/) | Structured logging with transport abstraction | `npm install @centient/logger` |
+| [`@centient/wal`](./packages/wal/) | Write-ahead log for crash recovery | `npm install @centient/wal` |
 
 ## Development
 

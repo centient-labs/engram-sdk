@@ -1,5 +1,5 @@
 /**
- * Transport implementations for @engram/logger
+ * Transport implementations for @centient/logger
  *
  * @module transports
  */

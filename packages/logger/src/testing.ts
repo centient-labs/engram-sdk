@@ -1,5 +1,5 @@
 /**
- * Testing Utilities for @engram/logger
+ * Testing Utilities for @centient/logger
  *
  * Provides utilities for capturing and inspecting log output in tests.
  *

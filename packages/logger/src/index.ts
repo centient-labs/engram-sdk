@@ -1,5 +1,5 @@
 /**
- * @engram/logger - Shared logging infrastructure for Engram packages
+ * @centient/logger - Shared logging infrastructure for Engram packages
  *
  * Provides structured logging with:
  * - Multiple transport options (Console, File, Null)
@@ -9,10 +9,10 @@
  * - Audit event logging
  * - Testing utilities
  *
- * @module @engram/logger
+ * @module @centient/logger
  *
  * @example
- * import { createLogger, ConsoleTransport } from "@engram/logger";
+ * import { createLogger, ConsoleTransport } from "@centient/logger";
  *
  * const logger = createLogger({
  *   service: "my-service",

@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the `@engram/sdk` package will be documented in this file.
+All notable changes to the `@centient/sdk` package will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `client.crystals.rerank(request: RerankRequest): Promise<RerankResponse>` method
 - Optional `reranking?: RerankingConfig` parameter on `client.crystals.search()`
 - New types: `RerankingConfig`, `RerankingMetadata`, `RerankingBudgetUsage`, `RankedSearchResult`, `RerankingBoost`, `DiagnosticRerankInfo` (unstable), `RerankRequest`, `RerankResponse`
-- All new types exported from `@engram/sdk`
+- All new types exported from `@centient/sdk`
 
 ### Changed
 - `search()` return type is now `KnowledgeCrystalSearchResult[] | CrystalSearchWithRerankingResult` when `reranking.enabled: true` (backward compatible)
@@ -88,7 +88,7 @@ The `file_ref` and `directory` values are new in this release (Terrafirma node t
 
 #### Backward Compatibility
 
-All deprecated types are still exported from their original locations and from `@engram/sdk`. No immediate code changes are required — deprecation warnings appear only at the TypeScript level (IDE tooltips). The deprecated names will be removed in a future major release.
+All deprecated types are still exported from their original locations and from `@centient/sdk`. No immediate code changes are required — deprecation warnings appear only at the TypeScript level (IDE tooltips). The deprecated names will be removed in a future major release.
 
 ### Added
 

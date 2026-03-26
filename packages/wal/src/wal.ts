@@ -15,7 +15,7 @@ import { mkdir, appendFile, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 
-import { createComponentLogger } from "@engram/logger";
+import { createComponentLogger } from "@centient/logger";
 
 import type {
   WALEntry,

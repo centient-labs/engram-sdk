@@ -47,7 +47,7 @@ importers:
 
   packages/wal:
     dependencies:
-      '@engram/logger':
+      '@centient/logger':
         specifier: workspace:*
         version: link:../logger
     devDependencies:

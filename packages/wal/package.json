@@ -1,5 +1,5 @@
 {
-  "name": "@engram/wal",
+  "name": "@centient/wal",
   "version": "0.1.0",
   "description": "Shared Write-Ahead Log (WAL) for crash recovery across Engram packages",
   "type": "module",
@@ -32,7 +32,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@engram/logger": "workspace:*"
+    "@centient/logger": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

@@ -1,4 +1,4 @@
-# @engram/logger
+# @centient/logger
 
 Shared structured logging infrastructure for Engram packages. Provides structured logging with transport abstraction, context management, path/data sanitization, and audit event logging.
 
@@ -7,13 +7,13 @@ Shared structured logging infrastructure for Engram packages. Provides structure
 This is a private monorepo package. Add it as a workspace dependency:
 
 ```bash
-pnpm add @engram/logger --workspace
+pnpm add @centient/logger --workspace
 ```
 
 ## Quick Start
 
 ```typescript
-import { createLogger, ConsoleTransport } from "@engram/logger";
+import { createLogger, ConsoleTransport } from "@centient/logger";
 
 const logger = createLogger({
   service: "my-service",
@@ -41,7 +41,7 @@ The core logger interface provides six log levels: `trace`, `debug`, `info`, `wa
 Create a new logger instance.
 
 ```typescript
-import { createLogger } from "@engram/logger";
+import { createLogger } from "@centient/logger";
 
 const logger = createLogger({
   service: "my-service",      // Required: service name
@@ -57,7 +57,7 @@ const logger = createLogger({
 Create a logger with a specific component name.
 
 ```typescript
-import { createComponentLogger } from "@engram/logger";
+import { createComponentLogger } from "@centient/logger";
 
 const logger = createComponentLogger("my-service", "database");
 logger.info("Connection established");
@@ -69,7 +69,7 @@ logger.info("Connection established");
 Create a logger for MCP tools.
 
 ```typescript
-import { createToolLogger } from "@engram/logger";
+import { createToolLogger } from "@centient/logger";
 
 const logger = createToolLogger("centient", "search_patterns");
 logger.debug({ query: "authentication" }, "Searching patterns");
@@ -80,7 +80,7 @@ logger.debug({ query: "authentication" }, "Searching patterns");
 Create a logger with session context.
 
 ```typescript
-import { createSessionLogger } from "@engram/logger";
+import { createSessionLogger } from "@centient/logger";
 
 const logger = createSessionLogger(
   "centient",
@@ -131,7 +131,7 @@ requestLogger.info("Processing request");
 Writes to stderr with pretty or JSON formatting.
 
 ```typescript
-import { ConsoleTransport } from "@engram/logger";
+import { ConsoleTransport } from "@centient/logger";
 
 // Auto-detect format (pretty in development, JSON in production)
 const transport = new ConsoleTransport();
@@ -148,7 +148,7 @@ const jsonTransport = new ConsoleTransport({ pretty: false });
 Writes to a file with buffering and automatic rotation.
 
 ```typescript
-import { FileTransport } from "@engram/logger";
+import { FileTransport } from "@centient/logger";
 
 const transport = new FileTransport({
   filePath: "/var/log/my-app.jsonl",  // Required: log file path
@@ -164,7 +164,7 @@ const transport = new FileTransport({
 Discards all output. Useful for testing or disabling logging.
 
 ```typescript
-import { NullTransport } from "@engram/logger";
+import { NullTransport } from "@centient/logger";
 
 const transport = new NullTransport();
 ```
@@ -174,7 +174,7 @@ const transport = new NullTransport();
 Write-only audit event logging for security and compliance.
 
 ```typescript
-import { createAuditWriter } from "@engram/logger";
+import { createAuditWriter } from "@centient/logger";
 
 const auditWriter = createAuditWriter({
   version: "1.0.0",
@@ -221,7 +221,7 @@ Functions for removing sensitive data from logs.
 Replace home directory paths with `~`.
 
 ```typescript
-import { sanitizePath } from "@engram/logger";
+import { sanitizePath } from "@centient/logger";
 
 sanitizePath("/Users/john/project/file.ts");
 // Returns: "~/project/file.ts"
@@ -232,7 +232,7 @@ sanitizePath("/Users/john/project/file.ts");
 Extract and sanitize error messages.
 
 ```typescript
-import { sanitizeError } from "@engram/logger";
+import { sanitizeError } from "@centient/logger";
 
 try {
   // operation
@@ -246,7 +246,7 @@ try {
 Recursively sanitize an object, redacting sensitive fields and API keys.
 
 ```typescript
-import { sanitizeForLogging } from "@engram/logger";
+import { sanitizeForLogging } from "@centient/logger";
 
 const sanitized = sanitizeForLogging({
   apiKey: "sk-1234567890abcdefghijklmnop",
@@ -266,7 +266,7 @@ const sanitized = sanitizeForLogging({
 Check if a field name indicates sensitive data.
 
 ```typescript
-import { isSensitiveFieldName } from "@engram/logger";
+import { isSensitiveFieldName } from "@centient/logger";
 
 isSensitiveFieldName("password");     // true
 isSensitiveFieldName("userPassword"); // true
@@ -279,7 +279,7 @@ isSensitiveFieldName("username");     // false
 Create a standardized sanitized error response.
 
 ```typescript
-import { createSanitizedErrorResponse } from "@engram/logger";
+import { createSanitizedErrorResponse } from "@centient/logger";
 
 return createSanitizedErrorResponse("FILE_READ_ERROR", error, 45);
 // Returns:
@@ -297,7 +297,7 @@ return createSanitizedErrorResponse("FILE_READ_ERROR", error, 45);
 Create a logger that captures output for test assertions.
 
 ```typescript
-import { createTestLogger } from "@engram/logger";
+import { createTestLogger } from "@centient/logger";
 
 const { logger, getEntries, getOutput, clear } = createTestLogger("my-component");
 
@@ -315,7 +315,7 @@ clear(); // Reset for next test
 Transport that stores log entries for inspection.
 
 ```typescript
-import { CaptureTransport, createLogger } from "@engram/logger";
+import { CaptureTransport, createLogger } from "@centient/logger";
 
 const transport = new CaptureTransport();
 const logger = createLogger({ service: "test", transport });
@@ -331,7 +331,7 @@ expect(transport.getEntriesByLevel("warn")).toHaveLength(1);
 Create a logger that discards all output.
 
 ```typescript
-import { createSilentLogger } from "@engram/logger";
+import { createSilentLogger } from "@centient/logger";
 
 const logger = createSilentLogger("test");
 logger.info("This goes nowhere"); // No output

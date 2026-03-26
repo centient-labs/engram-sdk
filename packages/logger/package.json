@@ -1,5 +1,5 @@
 {
-  "name": "@engram/logger",
+  "name": "@centient/logger",
   "version": "0.15.0",
   "description": "Shared structured logging infrastructure for Engram packages",
   "type": "module",

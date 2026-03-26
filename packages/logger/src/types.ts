@@ -1,5 +1,5 @@
 /**
- * Type definitions for @engram/logger
+ * Type definitions for @centient/logger
  *
  * Consolidated types from centient's logger.ts and AuditLogger.ts
  *

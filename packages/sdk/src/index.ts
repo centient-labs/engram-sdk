@@ -1,11 +1,11 @@
 /**
- * @engram/sdk - TypeScript SDK for Engram Memory Server
+ * @centient/sdk - TypeScript SDK for Engram Memory Server
  *
  * A typed client for AI agent memory operations.
  *
  * @example
  * ```typescript
- * import { EngramClient, createEngramClient } from "@engram/sdk";
+ * import { EngramClient, createEngramClient } from "@centient/sdk";
  *
  * // Create client from environment variables
  * const client = createEngramClient();

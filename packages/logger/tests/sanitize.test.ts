@@ -1,7 +1,7 @@
 /**
  * Tests for Sanitization Utilities
  *
- * Comprehensive tests for the @engram/logger sanitization module.
+ * Comprehensive tests for the @centient/logger sanitization module.
  * Verifies that no sensitive data (usernames, paths, API keys, passwords, tokens)
  * can leak through the sanitization layer.
  */
