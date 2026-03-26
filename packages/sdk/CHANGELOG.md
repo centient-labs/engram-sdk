@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0
+
+### Minor Changes
+
+- f678c29: Initial public release of @centient/logger, @centient/sdk, and @centient/wal.
+  Extracted from centient monorepo for independent versioning and npm publishing.
+
 All notable changes to the `@centient/sdk` package will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
@@ -7,12 +14,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+
 - `client.crystals.rerank(request: RerankRequest): Promise<RerankResponse>` method
 - Optional `reranking?: RerankingConfig` parameter on `client.crystals.search()`
 - New types: `RerankingConfig`, `RerankingMetadata`, `RerankingBudgetUsage`, `RankedSearchResult`, `RerankingBoost`, `DiagnosticRerankInfo` (unstable), `RerankRequest`, `RerankResponse`
 - All new types exported from `@centient/sdk`
 
 ### Changed
+
 - `search()` return type is now `KnowledgeCrystalSearchResult[] | CrystalSearchWithRerankingResult` when `reranking.enabled: true` (backward compatible)
 
 ## [1.0.0] - 2026-02-28
@@ -30,30 +39,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 #### Type Renames
 
-| Old Type | New Type | Notes |
-|----------|----------|-------|
-| `KnowledgeItem` | `KnowledgeCrystal` | Deprecated alias still exported |
-| `Crystal` | `KnowledgeCrystal` | Deprecated alias still exported |
-| `KnowledgeItemType` | `NodeType` | 6-value subset; full union has 12 values |
-| `CrystalType` | `NodeType` | 4-value subset; full union has 12 values |
-| `KnowledgeEdge` | `KnowledgeCrystalEdge` | Deprecated alias still exported |
-| `CrystalEdge` | `KnowledgeCrystalEdge` | Deprecated alias still exported |
-| `EdgeRelationship` | `KnowledgeCrystalEdgeRelationship` | Deprecated alias still exported |
-| `CrystalEdgeRelationship` | `KnowledgeCrystalEdgeRelationship` | Deprecated alias still exported |
+| Old Type                  | New Type                           | Notes                                    |
+| ------------------------- | ---------------------------------- | ---------------------------------------- |
+| `KnowledgeItem`           | `KnowledgeCrystal`                 | Deprecated alias still exported          |
+| `Crystal`                 | `KnowledgeCrystal`                 | Deprecated alias still exported          |
+| `KnowledgeItemType`       | `NodeType`                         | 6-value subset; full union has 12 values |
+| `CrystalType`             | `NodeType`                         | 4-value subset; full union has 12 values |
+| `KnowledgeEdge`           | `KnowledgeCrystalEdge`             | Deprecated alias still exported          |
+| `CrystalEdge`             | `KnowledgeCrystalEdge`             | Deprecated alias still exported          |
+| `EdgeRelationship`        | `KnowledgeCrystalEdgeRelationship` | Deprecated alias still exported          |
+| `CrystalEdgeRelationship` | `KnowledgeCrystalEdgeRelationship` | Deprecated alias still exported          |
 
 #### API Surface Changes
 
-| Old API | New API | Notes |
-|---------|---------|-------|
-| `client.knowledge.list(params)` | `client.crystals.list(params)` | Add `nodeType` to filter by type |
-| `client.knowledge.get(id)` | `client.crystals.get(id)` | |
-| `client.knowledge.create(params)` | `client.crystals.create(params)` | |
-| `client.knowledge.update(id, params)` | `client.crystals.update(id, params)` | |
-| `client.knowledge.delete(id)` | `client.crystals.delete(id)` | |
-| `client.knowledge.search(params)` | `client.crystals.search(params)` | |
-| `client.knowledge.promote(id, params)` | `client.crystals.promote(id, params)` | |
-| `client.knowledge.getRelated(id, params)` | `client.crystals.getRelated(id, params)` | |
-| `client.knowledge.edges.*` | `client.edges.*` | Edge API unchanged |
+| Old API                                   | New API                                  | Notes                            |
+| ----------------------------------------- | ---------------------------------------- | -------------------------------- |
+| `client.knowledge.list(params)`           | `client.crystals.list(params)`           | Add `nodeType` to filter by type |
+| `client.knowledge.get(id)`                | `client.crystals.get(id)`                |                                  |
+| `client.knowledge.create(params)`         | `client.crystals.create(params)`         |                                  |
+| `client.knowledge.update(id, params)`     | `client.crystals.update(id, params)`     |                                  |
+| `client.knowledge.delete(id)`             | `client.crystals.delete(id)`             |                                  |
+| `client.knowledge.search(params)`         | `client.crystals.search(params)`         |                                  |
+| `client.knowledge.promote(id, params)`    | `client.crystals.promote(id, params)`    |                                  |
+| `client.knowledge.getRelated(id, params)` | `client.crystals.getRelated(id, params)` |                                  |
+| `client.knowledge.edges.*`                | `client.edges.*`                         | Edge API unchanged               |
 
 #### NodeType Union Values
 
@@ -61,15 +70,24 @@ The new `NodeType` union replaces both `KnowledgeItemType` and `CrystalType`:
 
 ```typescript
 // Old: content types (KnowledgeItemType)
-"pattern" | "learning" | "decision" | "note" | "finding" | "constraint"
+"pattern" | "learning" | "decision" | "note" | "finding" | "constraint";
 
 // Old: container types (CrystalType)
-"collection" | "session_artifact" | "project" | "domain"
+"collection" | "session_artifact" | "project" | "domain";
 
 // New: unified NodeType (all 12 values)
-"pattern" | "learning" | "decision" | "note" | "finding" | "constraint"
-  | "collection" | "session_artifact" | "project" | "domain"
-  | "file_ref" | "directory"
+"pattern" |
+  "learning" |
+  "decision" |
+  "note" |
+  "finding" |
+  "constraint" |
+  "collection" |
+  "session_artifact" |
+  "project" |
+  "domain" |
+  "file_ref" |
+  "directory";
 ```
 
 The `file_ref` and `directory` values are new in this release (Terrafirma node types).
@@ -80,10 +98,15 @@ The `file_ref` and `directory` values are new in this release (Terrafirma node t
 
 ```typescript
 // Old EdgeRelationship
-"related_to" | "derived_from" | "contradicts" | "implements" | "depends_on"
+"related_to" | "derived_from" | "contradicts" | "implements" | "depends_on";
 
 // New KnowledgeCrystalEdgeRelationship
-"related_to" | "derived_from" | "contradicts" | "implements" | "depends_on" | "contains"
+"related_to" |
+  "derived_from" |
+  "contradicts" |
+  "implements" |
+  "depends_on" |
+  "contains";
 ```
 
 #### Backward Compatibility
