@@ -2,6 +2,11 @@
   "name": "@centient/logger",
   "version": "0.16.0",
   "description": "Shared structured logging infrastructure for Engram packages",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/centient-labs/engram-sdk",
+    "directory": "packages/logger"
+  },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

@@ -2,6 +2,11 @@
   "name": "@centient/sdk",
   "version": "1.3.0",
   "description": "TypeScript SDK for Engram Memory Server",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/centient-labs/engram-sdk",
+    "directory": "packages/sdk"
+  },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

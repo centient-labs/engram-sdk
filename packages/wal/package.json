@@ -2,6 +2,11 @@
   "name": "@centient/wal",
   "version": "0.2.0",
   "description": "Shared Write-Ahead Log (WAL) for crash recovery across Engram packages",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/centient-labs/engram-sdk",
+    "directory": "packages/wal"
+  },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
