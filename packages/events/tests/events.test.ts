@@ -5,7 +5,7 @@
  *   - Basic emit/subscribe (single subscriber, multiple events)
  *   - Multiple subscribers (fan-out, each gets all events)
  *   - AsyncIterable consumption (for-await-of pattern)
- *   - Backpressure: drop-oldest, drop-newest, block policies
+ *   - Backpressure: drop-oldest, drop-newest policies
  *   - JSONL subscriber (write to temp file, verify contents)
  *   - Subscriber removal (dispose function from tee())
  *   - Error isolation (subscriber error doesn't affect others)
@@ -250,26 +250,7 @@ describe("EventStream", () => {
       ]);
     });
 
-    it("block: allows buffer to grow beyond limit", async () => {
-      const stream = createEventStream<TestEvent>({
-        backpressure: "block",
-        defaultBufferSize: 2,
-      });
-      const iter = stream.subscribe();
-
-      // Emit 4 events — "block" in sync mode just allows overflow
-      for (let i = 1; i <= 4; i++) {
-        stream.emit({ type: "e", value: i });
-      }
-
-      const result = await collect(iter, 4);
-      expect(result).toEqual([
-        { type: "e", value: 1 },
-        { type: "e", value: 2 },
-        { type: "e", value: 3 },
-        { type: "e", value: 4 },
-      ]);
-    });
+    // "block" policy removed — it was misleading (allowed unbounded buffer growth)
 
     it("per-subscriber bufferSize overrides default", async () => {
       const stream = createEventStream<TestEvent>({
@@ -503,12 +484,12 @@ describe("JSONL subscriber", () => {
 
     const parsed0 = JSON.parse(lines[0]!);
     expect(parsed0._ts).toBeDefined();
-    expect(parsed0.type).toBe("a");
-    expect(parsed0.value).toBe(1);
+    expect(parsed0.event.type).toBe("a");
+    expect(parsed0.event.value).toBe(1);
 
     const parsed1 = JSON.parse(lines[1]!);
-    expect(parsed1.type).toBe("b");
-    expect(parsed1.value).toBe(2);
+    expect(parsed1.event.type).toBe("b");
+    expect(parsed1.event.value).toBe(2);
   });
 
   it("creates parent directories if they don't exist", async () => {
@@ -543,7 +524,7 @@ describe("JSONL subscriber", () => {
     const content = readFileSync(filePath, "utf-8");
     const lines = content.trim().split("\n");
     expect(lines).toHaveLength(1);
-    expect(JSON.parse(lines[0]!).type).toBe("a");
+    expect(JSON.parse(lines[0]!).event.type).toBe("a");
   });
 });
 

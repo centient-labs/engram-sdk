@@ -2,7 +2,7 @@
  * JSONL File Subscriber
  *
  * Appends events as newline-delimited JSON to a file. Each event is
- * serialized with a `_ts` field prepended (ISO 8601 timestamp).
+ * wrapped in `{ _ts, event }` (ISO 8601 timestamp + original payload).
  *
  * Writes are buffered and flushed periodically (every 100ms or 100 events).
  * File writes use append mode — safe for concurrent reads (tail -f).
@@ -23,6 +23,20 @@ const logger = createComponentLogger("centient", "events:jsonl");
 
 const FLUSH_INTERVAL_MS = 100;
 const FLUSH_BATCH_SIZE = 100;
+const MAX_BUFFER_SIZE = FLUSH_BATCH_SIZE * 10;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function errorContext(err: unknown, filePath?: string): Record<string, unknown> {
+  const ctx: Record<string, unknown> = {
+    error: err instanceof Error ? err.message : String(err),
+    stack: err instanceof Error ? err.stack : undefined,
+  };
+  if (filePath !== undefined) ctx.filePath = filePath;
+  return ctx;
+}
 
 // ---------------------------------------------------------------------------
 // Factory
@@ -41,12 +55,13 @@ export function createJsonlSubscriber<T>(filePath: string): {
   let buffer: string[] = [];
   let flushTimer: ReturnType<typeof setInterval> | null = null;
   let dirCreated = false;
+  let flushChain: Promise<void> = Promise.resolve();
 
   // -------------------------------------------------------------------------
   // Flush
   // -------------------------------------------------------------------------
 
-  async function flush(): Promise<void> {
+  async function doFlush(): Promise<void> {
     if (buffer.length === 0) return;
 
     const lines = buffer;
@@ -59,8 +74,28 @@ export function createJsonlSubscriber<T>(filePath: string): {
       }
       await appendFile(filePath, lines.join(""), "utf-8");
     } catch (err) {
-      logger.error({ filePath, error: String(err) }, "JSONL write error");
+      // Reset dirCreated if the directory was removed
+      if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
+        dirCreated = false;
+      }
+
+      // Prepend failed lines back into the buffer for retry
+      buffer = [...lines, ...buffer];
+
+      // Cap buffer to prevent infinite growth
+      if (buffer.length > MAX_BUFFER_SIZE) {
+        const dropped = buffer.length - MAX_BUFFER_SIZE;
+        buffer = buffer.slice(dropped);
+        logger.warn({ filePath, droppedLines: dropped }, "JSONL buffer overflow, oldest lines dropped");
+      }
+
+      logger.error(errorContext(err, filePath), "JSONL write error");
     }
+  }
+
+  function flush(): Promise<void> {
+    flushChain = flushChain.then(doFlush);
+    return flushChain;
   }
 
   // -------------------------------------------------------------------------
@@ -71,7 +106,7 @@ export function createJsonlSubscriber<T>(filePath: string): {
     if (flushTimer) return;
     flushTimer = setInterval(() => {
       flush().catch((err) => {
-        logger.error({ error: String(err) }, "JSONL periodic flush error");
+        logger.error(errorContext(err, filePath), "JSONL periodic flush error");
       });
     }, FLUSH_INTERVAL_MS);
     // Unref so the timer doesn't keep the process alive
@@ -92,33 +127,29 @@ export function createJsonlSubscriber<T>(filePath: string): {
   // -------------------------------------------------------------------------
 
   const subscriber: EventSubscriber<T> = {
-    name: `jsonl:${filePath}`,
-
     onEvent(event: T): void {
-      const line = JSON.stringify({ _ts: new Date().toISOString(), ...event as object }) + "\n";
+      const line = JSON.stringify({ _ts: new Date().toISOString(), event }) + "\n";
       buffer.push(line);
-      startTimer();
+      if (!flushTimer) startTimer();
 
       // Flush eagerly if batch size reached
       if (buffer.length >= FLUSH_BATCH_SIZE) {
         flush().catch((err) => {
-          logger.error({ error: String(err) }, "JSONL batch flush error");
+          logger.error(errorContext(err, filePath), "JSONL batch flush error");
         });
       }
     },
 
     onError(error: Error): void {
-      logger.error({ filePath, error: error.message }, "JSONL subscriber received error");
+      logger.error({ filePath, error: error.message, stack: error.stack }, "JSONL subscriber received error");
     },
 
     onClose(): void {
       stopTimer();
-      // Synchronous-safe: schedule final flush (close() awaits the flush promise)
-      flush().catch((err) => {
-        logger.error({ error: String(err) }, "JSONL final flush error");
-      });
     },
   };
+
+  logger.info({ filePath }, "JSONL subscriber created");
 
   return { subscriber, flush: async () => { stopTimer(); await flush(); } };
 }

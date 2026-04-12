@@ -20,25 +20,15 @@ import { open, type FileHandle } from "node:fs/promises";
 
 import { createComponentLogger } from "@centient/logger";
 
+import type { FromJsonlOptions } from "./types.js";
+
 const logger = createComponentLogger("centient", "events:replay");
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+/** Maximum line size before discarding (1 MB). */
+const MAX_LINE_BYTES = 1_048_576;
 
-/** Options for `fromJsonl()`. */
-export interface FromJsonlOptions {
-  /**
-   * If true, continue watching for new lines after reaching EOF (like tail -f).
-   * Default: false (read to EOF then complete).
-   */
-  follow?: boolean;
-  /**
-   * If true, keep the `_ts` metadata field in emitted events.
-   * Default: false (strip `_ts` before yielding).
-   */
-  keepMeta?: boolean;
-}
+/** Reusable read buffer size for follow mode (64 KB). */
+const READ_BUFFER_SIZE = 65_536;
 
 // ---------------------------------------------------------------------------
 // Factory
@@ -75,14 +65,17 @@ function createOneShotIterator<T>(path: string, keepMeta: boolean): AsyncIterato
   let rl: ReadlineInterface | null = null;
   const buffer: T[] = [];
   let done = false;
+  let streamError: Error | null = null;
   let waiting: ((result: IteratorResult<T>) => void) | null = null;
+  let waitingReject: ((error: Error) => void) | null = null;
 
   function init(): void {
     stream = createReadStream(path, { encoding: "utf-8" });
     rl = createInterface({ input: stream, crlfDelay: Infinity });
+    logger.info({ path }, "JSONL reader opened");
 
     rl.on("line", (line: string) => {
-      const parsed = parseLine<T>(line, keepMeta);
+      const parsed = parseLine<T>(line, keepMeta, path);
       if (parsed === null) return;
 
       if (waiting) {
@@ -96,6 +89,9 @@ function createOneShotIterator<T>(path: string, keepMeta: boolean): AsyncIterato
 
     rl.on("close", () => {
       done = true;
+      stream = null;
+      rl = null;
+      logger.info({ path }, "JSONL reader closed");
       if (waiting) {
         const resolve = waiting;
         waiting = null;
@@ -104,22 +100,26 @@ function createOneShotIterator<T>(path: string, keepMeta: boolean): AsyncIterato
     });
 
     rl.on("error", (err: Error) => {
-      logger.error({ error: err.message }, "JSONL readline error");
+      logger.error({ error: err.message, stack: err.stack, path }, "JSONL readline error");
+      streamError = err;
       done = true;
-      if (waiting) {
-        const resolve = waiting;
+      if (waitingReject) {
+        const reject = waitingReject;
         waiting = null;
-        resolve({ done: true, value: undefined });
+        waitingReject = null;
+        reject(err);
       }
     });
 
     stream.on("error", (err: Error) => {
-      logger.error({ error: err.message }, "JSONL read stream error");
+      logger.error({ error: err.message, stack: err.stack, path }, "JSONL read stream error");
+      streamError = err;
       done = true;
-      if (waiting) {
-        const resolve = waiting;
+      if (waitingReject) {
+        const reject = waitingReject;
         waiting = null;
-        resolve({ done: true, value: undefined });
+        waitingReject = null;
+        reject(err);
       }
     });
   }
@@ -133,25 +133,33 @@ function createOneShotIterator<T>(path: string, keepMeta: boolean): AsyncIterato
         return Promise.resolve({ done: false, value: buffer.shift()! });
       }
 
-      // If we've finished reading, signal done
+      // If we've finished reading, signal done or propagate error
       if (done) {
+        if (streamError) {
+          const err = streamError;
+          streamError = null;
+          return Promise.reject(err);
+        }
         return Promise.resolve({ done: true, value: undefined });
       }
 
       // Wait for the next line
-      return new Promise<IteratorResult<T>>((resolve) => {
+      return new Promise<IteratorResult<T>>((resolve, reject) => {
         waiting = resolve;
+        waitingReject = reject;
       });
     },
 
     return(): Promise<IteratorResult<T>> {
-      cleanup(rl, stream, null);
+      done = true;
+      try { rl?.close(); } catch (err) { logger.warn({ error: String(err) }, "cleanup error"); }
+      try { stream?.destroy(); } catch (err) { logger.warn({ error: String(err) }, "cleanup error"); }
       rl = null;
       stream = null;
-      done = true;
       if (waiting) {
         const resolve = waiting;
         waiting = null;
+        waitingReject = null;
         resolve({ done: true, value: undefined });
       }
       return Promise.resolve({ done: true, value: undefined });
@@ -172,45 +180,87 @@ function createFollowIterator<T>(path: string, keepMeta: boolean): AsyncIterator
   let closed = false;
   let waiting: ((result: IteratorResult<T>) => void) | null = null;
   let initialized = false;
+  let initError: Error | null = null;
+
+  const readBuf = Buffer.allocUnsafe(READ_BUFFER_SIZE);
 
   async function init(): Promise<void> {
     if (initialized) return;
-    initialized = true;
+    try {
+      fh = await open(path, "r");
 
-    fh = await open(path, "r");
+      // Read initial content
+      await readNewContent();
 
-    // Read initial content
-    await readNewContent();
-
-    // Watch for changes
-    watcher = watch(path, () => {
-      readNewContent().catch((err) => {
-        logger.error({ error: String(err) }, "follow mode read error");
+      // Watch for changes
+      watcher = watch(path, () => {
+        readNewContent().catch((err) => {
+          logger.error(
+            { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined, path },
+            "follow mode read error",
+          );
+          closed = true;
+          if (waiting) {
+            const resolve = waiting;
+            waiting = null;
+            resolve({ done: true, value: undefined });
+          }
+        });
       });
-    });
-    watcher.unref();
+      watcher.unref();
+      initialized = true;
+      logger.info({ path }, "follow mode reader opened");
+    } catch (err) {
+      closed = true;
+      initError = err instanceof Error ? err : new Error(String(err));
+      logger.error({ error: initError.message, stack: initError.stack, path }, "follow mode init failed");
+      if (waiting) {
+        const resolve = waiting;
+        waiting = null;
+        resolve({ done: true, value: undefined });
+      }
+    }
   }
 
   async function readNewContent(): Promise<void> {
     if (!fh || closed) return;
 
+    // Detect file truncation before reading
     const stat = await fh.stat();
+    if (stat.size < offset) {
+      logger.warn({ path, previousOffset: offset, newSize: stat.size }, "JSONL file truncated — resetting read position");
+      offset = 0;
+      remainder = "";
+    }
     if (stat.size <= offset) return;
 
-    const readSize = stat.size - offset;
-    const buf = Buffer.alloc(readSize);
-    const { bytesRead } = await fh.read(buf, 0, readSize, offset);
-    offset += bytesRead;
+    let totalRead = 0;
+    let text = remainder;
 
-    const text = remainder + buf.toString("utf-8", 0, bytesRead);
+    while (true) {
+      const { bytesRead } = await fh.read(readBuf, 0, READ_BUFFER_SIZE, offset);
+      if (bytesRead === 0) break;
+      offset += bytesRead;
+      text += readBuf.toString("utf-8", 0, bytesRead);
+      totalRead += bytesRead;
+    }
+
+    if (totalRead === 0) return;
+
     const lines = text.split("\n");
 
     // Last element may be incomplete — save for next read
     remainder = lines.pop() ?? "";
 
+    // Guard against unbounded remainder growth
+    if (remainder.length > MAX_LINE_BYTES) {
+      logger.warn({ path }, "follow mode: oversized line discarded");
+      remainder = "";
+    }
+
     for (const line of lines) {
       if (line.trim() === "") continue;
-      const parsed = parseLine<T>(line, keepMeta);
+      const parsed = parseLine<T>(line, keepMeta, path);
       if (parsed === null) continue;
 
       if (waiting) {
@@ -226,6 +276,10 @@ function createFollowIterator<T>(path: string, keepMeta: boolean): AsyncIterator
   return {
     async next(): Promise<IteratorResult<T>> {
       await init();
+
+      if (initError) {
+        return Promise.reject(initError);
+      }
 
       // Return buffered item if available
       if (buffer.length > 0) {
@@ -245,11 +299,11 @@ function createFollowIterator<T>(path: string, keepMeta: boolean): AsyncIterator
     async return(): Promise<IteratorResult<T>> {
       closed = true;
       if (watcher) {
-        watcher.close();
+        try { watcher.close(); } catch (err) { logger.warn({ error: String(err) }, "cleanup error"); }
         watcher = null;
       }
       if (fh) {
-        await fh.close();
+        try { await fh.close(); } catch (err) { logger.warn({ error: String(err) }, "cleanup error"); }
         fh = null;
       }
       if (waiting) {
@@ -267,29 +321,40 @@ function createFollowIterator<T>(path: string, keepMeta: boolean): AsyncIterator
 // ---------------------------------------------------------------------------
 
 /** Parse a JSONL line, optionally stripping the `_ts` metadata field. */
-function parseLine<T>(line: string, keepMeta: boolean): T | null {
+function parseLine<T>(line: string, keepMeta: boolean, path: string): T | null {
   const trimmed = line.trim();
   if (trimmed === "") return null;
 
   try {
-    const parsed = JSON.parse(trimmed) as Record<string, unknown>;
-    if (!keepMeta && "_ts" in parsed) {
-      delete parsed["_ts"];
+    const raw: unknown = JSON.parse(trimmed);
+
+    // Type guard: only accept plain objects
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+      logger.warn({ path, line: trimmed.slice(0, 120) }, "skipping non-object JSONL line");
+      return null;
     }
+
+    const parsed = raw as Record<string, unknown>;
+
+    // Handle wrapper format { _ts, event: ... } from updated jsonl.ts
+    if ("event" in parsed) {
+      const event = parsed["event"];
+      if (keepMeta) {
+        return { _ts: parsed["_ts"], ...(event as object) } as T;
+      }
+      return event as T;
+    }
+
+    // Legacy spread format (backwards compatibility)
+    if (!keepMeta && "_ts" in parsed) {
+      const { _ts, ...rest } = parsed;
+      void _ts;
+      return rest as T;
+    }
+
     return parsed as T;
   } catch {
-    logger.warn("skipping malformed JSONL line");
+    logger.warn({ path, line: trimmed.slice(0, 120) }, "skipping malformed JSONL line");
     return null;
   }
-}
-
-/** Clean up readline, stream, and watcher resources. */
-function cleanup(
-  rl: ReadlineInterface | null,
-  stream: ReadStream | null,
-  watcher: FSWatcher | null,
-): void {
-  try { rl?.close(); } catch { /* ignore */ }
-  try { stream?.destroy(); } catch { /* ignore */ }
-  try { watcher?.close(); } catch { /* ignore */ }
 }

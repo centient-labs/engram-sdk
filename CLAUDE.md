@@ -19,8 +19,9 @@ See `.agent/DESIGN-PHILOSOPHY.md` for the 14 principles (3 tiers) that guide all
 
 | Package | Version | Description |
 |---------|---------|-------------|
-| `@centient/sdk` | 1.4.0 | TypeScript SDK for Engram Memory Server REST API. 20 resource classes, 130+ types. Factory: `createEngramClient()`. Requires engram-server >= 0.22.4 |
+| `@centient/events` | 0.1.0 | Typed event streaming with backpressure. AsyncIterable + callback fan-out, JSONL persistence/replay, configurable backpressure. Factory: `createEventStream()`, `fromJsonl()` |
 | `@centient/logger` | 0.16.0 | Structured logging with transport abstraction. 6 levels, Console/File/Null transports, audit events, data redaction. Factory: `createLogger()`, `createAuditWriter()` |
+| `@centient/sdk` | 1.4.0 | TypeScript SDK for Engram Memory Server REST API. 20 resource classes, 130+ types. Factory: `createEngramClient()`. Requires engram-server >= 0.22.4 |
 | `@centient/wal` | 0.2.0 | Write-ahead log for crash recovery. `appendEntry`, `confirmEntry`, `replayUnconfirmed`, `compactWal` |
 | `sdk-python` | - | Python SDK client with Pydantic v2 (async + sync) |
 

@@ -12,9 +12,8 @@
 
 /** Policy applied when a subscriber's buffer is full. */
 export type BackpressurePolicy =
-  | "drop-oldest"  // Drop oldest buffered event, add new one (default)
-  | "drop-newest"  // Reject new event, keep buffer intact
-  | "block";       // Block emit() until buffer has space (use carefully)
+  | "drop-oldest"   // Drop oldest buffered event, add new one (default)
+  | "drop-newest";  // Reject new event, keep buffer intact
 
 // ---------------------------------------------------------------------------
 // Subscribe Options
@@ -42,14 +41,12 @@ export interface SubscribeOptions<T = unknown> {
 
 /** Callback-based subscriber attached via `tee()`. */
 export interface EventSubscriber<T> {
-  /** Subscriber name (used for logging and diagnostics). */
-  name: string;
   /** Called for each emitted event. May be async. */
   onEvent(event: T): void | Promise<void>;
   /** Called when a subscriber-side error occurs. */
   onError?(error: Error): void;
-  /** Called when the stream closes. */
-  onClose?(): void;
+  /** Called when the stream closes. May be async for cleanup. */
+  onClose?(): void | Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -81,6 +78,8 @@ export interface EventStream<T> {
   /**
    * Convenience: add a JSONL file subscriber (appends events as JSON lines).
    * Returns a dispose function to remove the subscriber.
+   * Note: This is a Node.js-specific convenience. Use tee() with
+   * createJsonlSubscriber() directly for the same functionality.
    */
   jsonl(filePath: string): () => void;
 
@@ -89,6 +88,24 @@ export interface EventStream<T> {
 
   /** Close the stream — all subscribers receive completion signal. */
   close(): Promise<void>;
+}
+
+// ---------------------------------------------------------------------------
+// Replay Options
+// ---------------------------------------------------------------------------
+
+/** Options for `fromJsonl()`. */
+export interface FromJsonlOptions {
+  /**
+   * If true, continue watching for new lines after reaching EOF (like tail -f).
+   * Default: false (read to EOF then complete).
+   */
+  follow?: boolean;
+  /**
+   * If true, keep the `_ts` metadata field in emitted events.
+   * Default: false (strip `_ts` before yielding).
+   */
+  keepMeta?: boolean;
 }
 
 // ---------------------------------------------------------------------------

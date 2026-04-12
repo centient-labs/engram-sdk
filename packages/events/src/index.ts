@@ -13,6 +13,5 @@ export type {
   SubscribeOptions,
   BackpressurePolicy,
   EventEnvelope,
+  FromJsonlOptions,
 } from "./types.js";
-
-export type { FromJsonlOptions } from "./replay.js";

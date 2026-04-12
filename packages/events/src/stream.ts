@@ -30,20 +30,17 @@ const logger = createComponentLogger("centient", "events");
 // Internal Types
 // ---------------------------------------------------------------------------
 
-/** Resolve/value pair buffered for an AsyncIterable subscriber. */
-interface BufferedItem<T> {
-  value: T;
-}
-
 /** State for an AsyncIterable subscriber. */
 interface IterableSubscriber<T> {
-  buffer: BufferedItem<T>[];
+  buffer: T[];
   bufferSize: number;
   /** Resolve function for the pending next() call, if the consumer is waiting. */
   waiting: ((result: IteratorResult<T>) => void) | null;
   closed: boolean;
   /** Optional filter — only events passing this predicate are delivered. */
   filter?: (event: T) => boolean;
+  /** Count of events dropped due to backpressure. */
+  droppedCount: number;
 }
 
 /** State for a tee'd (callback-based) subscriber. */
@@ -84,12 +81,22 @@ export function createEventStream<T>(opts?: EventStreamOptions): EventStream<T> 
 
     // Deliver to AsyncIterable subscribers
     for (const sub of iterableSubs) {
-      if (sub.filter && !sub.filter(event)) continue;
+      if (sub.filter) {
+        try {
+          if (!sub.filter(event)) continue;
+        } catch (err) {
+          logger.error(
+            { error: err instanceof Error ? err.message : String(err) },
+            "subscriber filter threw — event skipped for this subscriber",
+          );
+          continue;
+        }
+      }
       deliverToIterable(sub, event, backpressure);
     }
 
     // Deliver to tee'd subscribers (fire-and-forget for async)
-    for (const [, teeSub] of teeSubs) {
+    for (const teeSub of teeSubs.values()) {
       deliverToTee(teeSub, event);
     }
   }
@@ -100,6 +107,7 @@ export function createEventStream<T>(opts?: EventStreamOptions): EventStream<T> 
 
   function subscribe(subOpts?: SubscribeOptions<T>): AsyncIterable<T> {
     if (closed) {
+      logger.warn("subscribe() called on closed stream — iterable will be immediately done");
       // Return an immediately-done iterable
       return {
         [Symbol.asyncIterator]() {
@@ -119,6 +127,7 @@ export function createEventStream<T>(opts?: EventStreamOptions): EventStream<T> 
       waiting: null,
       closed: false,
       filter: subOpts?.filter,
+      droppedCount: 0,
     };
     iterableSubs.add(sub);
 
@@ -128,8 +137,8 @@ export function createEventStream<T>(opts?: EventStreamOptions): EventStream<T> 
           next(): Promise<IteratorResult<T>> {
             // If there's a buffered item, return it immediately
             const item = sub.buffer.shift();
-            if (item) {
-              return Promise.resolve({ done: false, value: item.value });
+            if (item !== undefined) {
+              return Promise.resolve({ done: false, value: item });
             }
 
             // If the stream is closed and buffer is empty, we're done
@@ -146,7 +155,11 @@ export function createEventStream<T>(opts?: EventStreamOptions): EventStream<T> 
 
           return(): Promise<IteratorResult<T>> {
             sub.closed = true;
-            sub.waiting = null;
+            if (sub.waiting) {
+              const resolve = sub.waiting;
+              sub.waiting = null;
+              resolve({ done: true, value: undefined });
+            }
             iterableSubs.delete(sub);
             return Promise.resolve({ done: true, value: undefined });
           },
@@ -161,16 +174,20 @@ export function createEventStream<T>(opts?: EventStreamOptions): EventStream<T> 
 
   function tee(name: string, subscriber: EventSubscriber<T>): () => void {
     if (closed) {
-      logger.warn(`tee() called on closed stream — subscriber '${name}' not added`);
+      logger.warn({ subscriberName: name }, "tee() called on closed stream — subscriber not added");
       return () => {};
     }
 
+    if (teeSubs.has(name)) {
+      logger.warn({ subscriberName: name }, "tee() overwriting existing subscriber with same name");
+    }
+
     teeSubs.set(name, { name, subscriber });
-    logger.debug(`subscriber '${name}' added via tee()`);
+    logger.debug({ subscriberName: name }, "subscriber added via tee()");
 
     return () => {
       teeSubs.delete(name);
-      logger.debug(`subscriber '${name}' removed`);
+      logger.debug({ subscriberName: name }, "subscriber removed");
     };
   }
 
@@ -184,6 +201,12 @@ export function createEventStream<T>(opts?: EventStreamOptions): EventStream<T> 
     jsonlDisposers.set(filePath, flush);
 
     return () => {
+      const flushFn = jsonlDisposers.get(filePath);
+      if (flushFn) {
+        flushFn().catch((err) => {
+          logger.error({ error: String(err) }, "JSONL flush error on dispose");
+        });
+      }
       dispose();
       jsonlDisposers.delete(filePath);
     };
@@ -200,7 +223,10 @@ export function createEventStream<T>(opts?: EventStreamOptions): EventStream<T> 
     // Flush all JSONL buffers
     const flushPromises = Array.from(jsonlDisposers.values()).map((flush) =>
       flush().catch((err) => {
-        logger.error({ error: String(err) }, "JSONL flush error on close");
+        logger.error(
+          { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined },
+          "JSONL flush error on close",
+        );
       }),
     );
     await Promise.all(flushPromises);
@@ -216,14 +242,27 @@ export function createEventStream<T>(opts?: EventStreamOptions): EventStream<T> 
     }
     iterableSubs.clear();
 
-    // Notify tee'd subscribers
-    for (const [, teeSub] of teeSubs) {
+    // Notify tee'd subscribers and await async onClose handlers
+    const closePromises: Promise<void>[] = [];
+    for (const teeSub of teeSubs.values()) {
       try {
-        teeSub.subscriber.onClose?.();
+        const result = teeSub.subscriber.onClose?.() as void | Promise<void>;
+        if (result instanceof Promise) {
+          closePromises.push(result.catch((err) => {
+            logger.error(
+              { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined },
+              `onClose error in subscriber '${teeSub.name}'`,
+            );
+          }));
+        }
       } catch (err) {
-        logger.error({ error: String(err) }, `onClose error in subscriber '${teeSub.name}'`);
+        logger.error(
+          { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined },
+          `onClose error in subscriber '${teeSub.name}'`,
+        );
       }
     }
+    await Promise.all(closePromises);
 
     teeSubs.clear();
     logger.debug("stream closed");
@@ -232,6 +271,8 @@ export function createEventStream<T>(opts?: EventStreamOptions): EventStream<T> 
   // -------------------------------------------------------------------------
   // Public Interface
   // -------------------------------------------------------------------------
+
+  logger.debug({ backpressure, defaultBufferSize }, "stream created");
 
   return {
     emit,
@@ -265,7 +306,7 @@ function deliverToIterable<T>(
 
   // Buffer the event
   if (sub.buffer.length < sub.bufferSize) {
-    sub.buffer.push({ value: event });
+    sub.buffer.push(event);
     return;
   }
 
@@ -273,16 +314,18 @@ function deliverToIterable<T>(
   switch (policy) {
     case "drop-oldest":
       sub.buffer.shift();
-      sub.buffer.push({ value: event });
+      sub.buffer.push(event);
+      sub.droppedCount++;
+      if (sub.droppedCount === 1) {
+        logger.warn("subscriber buffer full — dropping oldest events (backpressure: drop-oldest)");
+      }
       break;
     case "drop-newest":
       // New event is dropped — buffer stays intact
-      break;
-    case "block":
-      // For "block" policy in a sync emit, we can't truly block.
-      // We add to the buffer beyond the limit. The consumer drains it.
-      // This is the best we can do without making emit() async.
-      sub.buffer.push({ value: event });
+      sub.droppedCount++;
+      if (sub.droppedCount === 1) {
+        logger.warn("subscriber buffer full — dropping newest events (backpressure: drop-newest)");
+      }
       break;
   }
 }
@@ -292,8 +335,8 @@ function deliverToTee<T>(teeSub: TeeSubscriber<T>, event: T): void {
   try {
     const result = teeSub.subscriber.onEvent(event);
     // If onEvent returns a Promise, catch errors from it
-    if (result && typeof result === "object" && "catch" in result) {
-      (result as Promise<void>).catch((err) => {
+    if (result instanceof Promise) {
+      result.catch((err) => {
         handleTeeError(teeSub, err);
       });
     }
@@ -305,12 +348,15 @@ function deliverToTee<T>(teeSub: TeeSubscriber<T>, event: T): void {
 /** Forward an error to a tee'd subscriber's onError callback. */
 function handleTeeError<T>(teeSub: TeeSubscriber<T>, err: unknown): void {
   const error = err instanceof Error ? err : new Error(String(err));
-  logger.error({ error: error.message }, `subscriber '${teeSub.name}' onEvent error`);
+  logger.error(
+    { error: error.message, stack: error.stack },
+    `subscriber '${teeSub.name}' onEvent error`,
+  );
   try {
     teeSub.subscriber.onError?.(error);
   } catch (onErrorErr) {
     logger.error(
-      { error: String(onErrorErr) },
+      { error: onErrorErr instanceof Error ? onErrorErr.message : String(onErrorErr), stack: onErrorErr instanceof Error ? onErrorErr.stack : undefined },
       `subscriber '${teeSub.name}' onError handler threw`,
     );
   }
