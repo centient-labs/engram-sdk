@@ -3,7 +3,7 @@ export { encrypt, decrypt, encryptObject, decryptObject } from "./crypto/vault-c
 export { ALGORITHM, IV_LENGTH, AUTH_TAG_LENGTH, KEY_LENGTH } from "./crypto/vault-common.js";
 
 // Credential vault
-export { storeCredential, getCredential, deleteCredential, getActiveVaultType, isSessionValid } from "./vault/vault.js";
+export { storeCredential, getCredential, deleteCredential, listCredentials, getActiveVaultType, isSessionValid } from "./vault/vault.js";
 export type { VaultBackend, VaultType, StoredCredentialMeta } from "./vault/types.js";
 
 // Platform detection

@@ -8,7 +8,8 @@
  *   centient secrets init              Initialize a new encrypted vault
  *   centient secrets unlock            Unlock the vault (prompts biometric)
  *   centient secrets lock              Lock the vault
- *   centient secrets list              List secret names (not values)
+ *   centient secrets list              List secret names in the encrypted file vault (~/.centient/secrets/vault.enc)
+ *   centient secrets list-backend-keys List keys in the active vault backend (keychain/libsecret/etc.) — used by library consumers
  *   centient secrets set <name>        Add/update a secret (prompts for value)
  *   centient secrets get <name>        Get a secret value
  *   centient secrets delete <name>     Delete a secret
@@ -43,6 +44,7 @@ export interface SecretsOptions {
     | "unlock"
     | "lock"
     | "list"
+    | "list-backend-keys"
     | "set"
     | "get"
     | "delete"
@@ -54,6 +56,8 @@ export interface SecretsOptions {
     | "env-current";
   secretName?: string;
   secretValue?: string;
+  /** Optional prefix filter for `list-backend-keys`. */
+  prefix?: string;
 }
 
 // =============================================================================
@@ -90,6 +94,7 @@ import {
   saveSecretsConfig,
 } from "../key-providers/index.js";
 import type { KeyProvider, KeyProviderType } from "../key-providers/types.js";
+import { listCredentials, getActiveVaultType } from "../vault/vault.js";
 
 const VAULT_PATH = join(homedir(), ".centient", "secrets", "vault.enc");
 const KEY_LENGTH = 32;
@@ -320,6 +325,42 @@ async function listSecrets(): Promise<void> {
     }
   }
   process.stdout.write("\n");
+}
+
+/**
+ * List keys stored in the active vault backend (keychain, libsecret,
+ * Windows Credential Manager, GPG file vault, or env var).
+ *
+ * This is distinct from `listSecrets`, which reads the encrypted file
+ * vault at `~/.centient/secrets/vault.enc`. The two storage paths are
+ * separate in this release.
+ */
+async function listBackendKeys(prefix?: string): Promise<void> {
+  const backendType = getActiveVaultType();
+  const header = prefix !== undefined
+    ? `\n🔑 Backend keys (${backendType}, prefix "${prefix}"):\n\n`
+    : `\n🔑 Backend keys (${backendType}):\n\n`;
+  process.stdout.write(header);
+
+  let keys: string[];
+  try {
+    keys = await listCredentials(prefix);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`❌ Failed to enumerate backend keys: ${message}`);
+    process.exit(1);
+  }
+
+  const sorted = [...keys].sort();
+  if (sorted.length === 0) {
+    process.stdout.write("   (no keys)\n\n");
+    return;
+  }
+
+  for (const key of sorted) {
+    process.stdout.write(`   ${key}\n`);
+  }
+  process.stdout.write(`\n(${sorted.length} ${sorted.length === 1 ? "key" : "keys"})\n\n`);
 }
 
 /**
@@ -717,6 +758,9 @@ export async function runSecrets(options: SecretsOptions): Promise<void> {
     case "list":
       await listSecrets();
       break;
+    case "list-backend-keys":
+      await listBackendKeys(options.prefix);
+      break;
     case "set":
       await setSecret(options.secretName || "");
       break;
@@ -746,7 +790,7 @@ export async function runSecrets(options: SecretsOptions): Promise<void> {
       break;
     default:
       console.error(`Unknown secrets command: ${options.command}`);
-      console.error("Available: init, unlock, lock, list, set, get, delete, status, migrate, env-list, env-switch, env-create, env-current");
+      console.error("Available: init, unlock, lock, list, list-backend-keys, set, get, delete, status, migrate, env-list, env-switch, env-create, env-current");
       process.exit(1);
   }
 }

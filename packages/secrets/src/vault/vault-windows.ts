@@ -202,4 +202,45 @@ export class WindowsVault implements VaultBackend {
     const result = runPowershell(command);
     return result !== null;
   }
+
+  /**
+   * Enumerate credential keys stored under the `centient` resource name
+   * in the Windows Credential Manager PasswordVault. Each credential's
+   * `UserName` is the logical key.
+   *
+   * The PowerShell `FindAllByResource` call throws when no credentials
+   * are stored for the resource — that is surfaced as an empty list, not
+   * an error, to match the `[]` semantics of other backends when nothing
+   * has been stored yet.
+   *
+   * A null result from `runPowershell` (powershell.exe itself failed to
+   * execute) is propagated as a thrown error per the VaultBackend contract.
+   */
+  listKeys(prefix?: string): string[] {
+    const command = [
+      "& {",
+      "[void][Windows.Security.Credentials.PasswordVault,Windows.Security.Credentials,ContentType=WindowsRuntime];",
+      "$vault = New-Object Windows.Security.Credentials.PasswordVault;",
+      "try {",
+      `$creds = $vault.FindAllByResource('${escapePsValue(RESOURCE_NAME)}');`,
+      "$creds | ForEach-Object { $_.UserName }",
+      "} catch {}",
+      "}",
+    ].join(" ");
+
+    const result = runPowershell(command);
+    if (result === null) {
+      throw new Error("Windows Credential Manager enumeration failed");
+    }
+    if (result.length === 0) return [];
+
+    const keys: string[] = [];
+    for (const line of result.split(/\r?\n/)) {
+      const key = line.trim();
+      if (key.length === 0) continue;
+      if (prefix !== undefined && !key.startsWith(prefix)) continue;
+      keys.push(key);
+    }
+    return keys;
+  }
 }

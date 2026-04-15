@@ -233,3 +233,71 @@ export function deleteFromKeychain(
     return true;
   }
 }
+
+/**
+ * Enumerate account names stored in the macOS Keychain under the given
+ * service, optionally filtered by a prefix on the account name.
+ *
+ * Uses `security dump-keychain` and parses entries where `"svce"` matches
+ * `service`, returning the corresponding `"acct"` value. Values (passwords)
+ * are NOT included in `dump-keychain` output (the `-d` flag is deliberately
+ * omitted), so no secret material is exposed by this call.
+ *
+ * Cost: `security dump-keychain` walks the entire default keychain — every
+ * generic-password entry, not just ones under `service` — so this call is
+ * O(total-keychain-size), not O(matching-entries). For users with large
+ * login keychains it can take hundreds of milliseconds and briefly hold
+ * third-party apps' entry metadata in this process's stdout buffer. Callers
+ * that enumerate frequently should cache the result.
+ *
+ * Throws if `security dump-keychain` fails — the VaultBackend contract
+ * requires transient enumeration failures to surface rather than silently
+ * returning an empty list.
+ */
+export function listAccountsInKeychain(
+  service: string,
+  prefix?: string,
+): string[] {
+  const output = execFileSync(
+    "security",
+    ["dump-keychain"],
+    {
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+      maxBuffer: 32 * 1024 * 1024,
+    },
+  );
+
+  const keys: string[] = [];
+  let currentSvce: string | null = null;
+  let currentAcct: string | null = null;
+
+  const flush = (): void => {
+    if (currentSvce === service && currentAcct !== null) {
+      if (prefix === undefined || currentAcct.startsWith(prefix)) {
+        keys.push(currentAcct);
+      }
+    }
+    currentSvce = null;
+    currentAcct = null;
+  };
+
+  for (const line of output.split("\n")) {
+    if (line.startsWith("keychain:") || /^class:\s/.test(line)) {
+      flush();
+      continue;
+    }
+    const svceMatch = /^\s*"svce"<blob>="(.*)"\s*$/.exec(line);
+    if (svceMatch !== null && svceMatch[1] !== undefined) {
+      currentSvce = svceMatch[1];
+      continue;
+    }
+    const acctMatch = /^\s*"acct"<blob>="(.*)"\s*$/.exec(line);
+    if (acctMatch !== null && acctMatch[1] !== undefined) {
+      currentAcct = acctMatch[1];
+      continue;
+    }
+  }
+  flush();
+  return keys;
+}

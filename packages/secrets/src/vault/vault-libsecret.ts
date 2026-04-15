@@ -122,4 +122,52 @@ export class LibsecretVault implements VaultBackend {
       return true;
     }
   }
+
+  /**
+   * Enumerate credential keys stored under the `centient` service in
+   * libsecret via `secret-tool search --all service centient`.
+   *
+   * Only the `attribute.key = <key>` lines in the output are inspected;
+   * the secret values that appear in the same output are ignored.
+   *
+   * Security note: `secret-tool search --all` emits the decrypted secret
+   * for every matching item on stdout as `secret = <value>` lines. This
+   * means every stored credential's plaintext is briefly materialized in
+   * this process's Node string buffer before being discarded and GC'd.
+   * No values are returned to callers or logged, but the transient
+   * exposure is inherent to the `secret-tool` CLI. A future switch to the
+   * libsecret D-Bus API would allow value-less enumeration.
+   *
+   * No results -> empty list. A transient `secret-tool` failure (e.g.
+   * D-Bus unavailable, keyring locked) is propagated per the VaultBackend
+   * contract so the caller can retry.
+   */
+  listKeys(prefix?: string): string[] {
+    let output: string;
+    try {
+      output = execSync(
+        `secret-tool search --all service ${SERVICE_ATTR}`,
+        {
+          encoding: "utf8",
+          stdio: ["pipe", "pipe", "pipe"],
+        },
+      );
+    } catch (err) {
+      // secret-tool exits non-zero when no matches are found — treat as empty.
+      const status = (err as { status?: number } | null)?.status;
+      if (status === 1) return [];
+      throw err;
+    }
+
+    const keys: string[] = [];
+    for (const line of output.split("\n")) {
+      const match = /^attribute\.key\s*=\s*(.+)$/.exec(line);
+      if (match === null || match[1] === undefined) continue;
+      const key = match[1].trim();
+      if (key.length === 0) continue;
+      if (prefix !== undefined && !key.startsWith(prefix)) continue;
+      keys.push(key);
+    }
+    return keys;
+  }
 }

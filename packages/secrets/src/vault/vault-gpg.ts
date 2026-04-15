@@ -9,7 +9,7 @@
  */
 
 import { execFileSync } from "child_process";
-import { mkdirSync, unlinkSync } from "fs";
+import { mkdirSync, readdirSync, unlinkSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 
@@ -164,5 +164,40 @@ export class GpgVault implements VaultBackend {
       }
       return false;
     }
+  }
+
+  /**
+   * Enumerate credential keys stored as `credentials-<key>.gpg` files in
+   * `~/.centient/auth/`.
+   *
+   * Missing directory -> empty list (nothing stored yet). Any other
+   * filesystem error (e.g. EACCES) is propagated so the caller can retry
+   * or surface the problem, per the VaultBackend contract.
+   */
+  listKeys(prefix?: string): string[] {
+    let entries: string[];
+    try {
+      entries = readdirSync(AUTH_DIR);
+    } catch (err) {
+      if (
+        err !== null &&
+        typeof err === "object" &&
+        "code" in err &&
+        (err as NodeJS.ErrnoException).code === "ENOENT"
+      ) {
+        return [];
+      }
+      throw err;
+    }
+
+    const keys: string[] = [];
+    for (const entry of entries) {
+      const match = /^credentials-(.+)\.gpg$/.exec(entry);
+      if (match === null || match[1] === undefined) continue;
+      const key = match[1];
+      if (prefix !== undefined && !key.startsWith(prefix)) continue;
+      keys.push(key);
+    }
+    return keys;
   }
 }

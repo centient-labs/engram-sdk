@@ -20,6 +20,7 @@ import {
   storeStringInKeychain,
   getStringFromKeychain,
   deleteFromKeychain,
+  listAccountsInKeychain,
 } from "../crypto/vault-common.js";
 import { WindowsVault } from "./vault-windows.js";
 import { LibsecretVault } from "./vault-libsecret.js";
@@ -57,6 +58,10 @@ class KeychainVault implements VaultBackend {
 
   delete(key: string): boolean {
     return deleteFromKeychain(AUTH_KEYCHAIN_SERVICE, key);
+  }
+
+  listKeys(prefix?: string): string[] {
+    return listAccountsInKeychain(AUTH_KEYCHAIN_SERVICE, prefix);
   }
 }
 
@@ -149,4 +154,33 @@ export async function getCredential(key: string): Promise<string | null> {
  */
 export async function deleteCredential(key: string): Promise<boolean> {
   return activeBackend.delete(key);
+}
+
+/**
+ * Enumerate credential keys in the active vault backend, optionally
+ * filtered by a key prefix.
+ *
+ * Returns only the keys — credential values are retrieved via
+ * `getCredential(key)` on demand. This keeps listing cheap and avoids
+ * pulling secret material into memory.
+ *
+ * @param prefix - optional key prefix filter. When omitted, all keys are
+ *                 returned.
+ *
+ * Note: credential keys must match `isValidKey` (`[a-z0-9][a-z0-9-]*[a-z0-9]`,
+ * <=64 chars) — lowercase alphanumeric plus hyphen, no dots. Callers that want
+ * a namespace separator should use hyphens (`soma-anthropic-token1`).
+ *
+ * @example
+ *   // Enumerate all soma-owned Anthropic credentials
+ *   const keys = await listCredentials("soma-anthropic-");
+ *   for (const key of keys) {
+ *     const value = await getCredential(key);
+ *     // ... round-robin rotation, etc.
+ *   }
+ */
+export async function listCredentials(prefix?: string): Promise<string[]> {
+  const keys = activeBackend.listKeys(prefix);
+  if (keys.length > 0) touchSession();
+  return keys;
 }
