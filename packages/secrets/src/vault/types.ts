@@ -80,10 +80,30 @@ export interface StoredCredentialMeta {
 
 /**
  * Common interface implemented by all vault backends.
- * Backends must implement store/retrieve/delete plus a static detect() method.
+ * Backends must implement store/retrieve/delete/listKeys plus a static detect() method.
  */
 export interface VaultBackend {
   store(key: string, value: string): boolean;
   retrieve(key: string): string | null;
   delete(key: string): boolean;
+
+  /**
+   * Enumerate credential keys stored in this backend.
+   *
+   * @param prefix - if provided, only keys starting with this prefix are
+   *                 returned. If omitted, returns every key the backend
+   *                 can see.
+   *
+   * Returns keys in unspecified order; callers must not rely on sort order.
+   *
+   * Implementations that cannot enumerate (e.g. an env-var backend without
+   * a naming convention they can filter) should return an empty array
+   * rather than throwing. Transient failures from the underlying store
+   * (keychain access denied, libsecret timeout, filesystem permission
+   * error) should throw, so the caller can retry or surface the problem.
+   *
+   * Synchronous to match the existing store/retrieve/delete signatures;
+   * any async wrapping happens in the public `listCredentials` function.
+   */
+  listKeys(prefix?: string): string[];
 }

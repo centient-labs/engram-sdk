@@ -76,4 +76,20 @@ export class EnvVault implements VaultBackend {
   delete(_key: string): boolean {
     return true;
   }
+
+  /**
+   * Enumerate logical keys served by this backend.
+   *
+   * EnvVault only surfaces a single hardcoded mapping (`auth-token` ->
+   * `ENGRAM_API_KEY`), so enumeration returns `["auth-token"]` when the
+   * underlying env var is set, otherwise `[]`.
+   *
+   * There is no user-defined naming convention over `process.env`, so
+   * arbitrary prefixes that don't match `auth-token` always produce `[]`.
+   */
+  listKeys(prefix?: string): string[] {
+    if (process.env["ENGRAM_API_KEY"] === undefined) return [];
+    if (prefix !== undefined && !"auth-token".startsWith(prefix)) return [];
+    return ["auth-token"];
+  }
 }

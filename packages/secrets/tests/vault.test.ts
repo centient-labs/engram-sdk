@@ -12,25 +12,32 @@ import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from "vites
 // Use vi.hoisted so mock functions are available during module factory execution
 // =============================================================================
 
-const { mockStoreString, mockGetString, mockDelete, _originalPlatform } =
-  vi.hoisted(() => {
-    // Force darwin so KeychainVault is always selected during module init,
-    // regardless of CI platform (Linux). This ensures the mocked vault-common
-    // functions are actually called by the active backend.
-    const _originalPlatform = process.platform;
-    Object.defineProperty(process, "platform", { value: "darwin", writable: true });
-    return {
-      mockStoreString: vi.fn(),
-      mockGetString: vi.fn(),
-      mockDelete: vi.fn(),
-      _originalPlatform,
-    };
-  });
+const {
+  mockStoreString,
+  mockGetString,
+  mockDelete,
+  mockListAccounts,
+  _originalPlatform,
+} = vi.hoisted(() => {
+  // Force darwin so KeychainVault is always selected during module init,
+  // regardless of CI platform (Linux). This ensures the mocked vault-common
+  // functions are actually called by the active backend.
+  const _originalPlatform = process.platform;
+  Object.defineProperty(process, "platform", { value: "darwin", writable: true });
+  return {
+    mockStoreString: vi.fn(),
+    mockGetString: vi.fn(),
+    mockDelete: vi.fn(),
+    mockListAccounts: vi.fn(),
+    _originalPlatform,
+  };
+});
 
 vi.mock("../src/crypto/vault-common.js", () => ({
   storeStringInKeychain: mockStoreString,
   getStringFromKeychain: mockGetString,
   deleteFromKeychain: mockDelete,
+  listAccountsInKeychain: mockListAccounts,
   encrypt: vi.fn(),
   decrypt: vi.fn(),
   encryptObject: vi.fn(),
@@ -48,6 +55,7 @@ import {
   storeCredential,
   getCredential,
   deleteCredential,
+  listCredentials,
   isSessionValid,
 } from "../src/vault/vault.js";
 
@@ -192,5 +200,72 @@ describe("deleteCredential", () => {
     mockDelete.mockReturnValue(false);
     const result = await deleteCredential("auth-token");
     expect(result).toBe(false);
+  });
+});
+
+// =============================================================================
+// listCredentials
+// =============================================================================
+
+describe("listCredentials", () => {
+  it("returns [] when the backend has no stored credentials", async () => {
+    mockListAccounts.mockReturnValue([]);
+    const result = await listCredentials();
+    expect(result).toEqual([]);
+  });
+
+  it("returns every stored key when no prefix is supplied", async () => {
+    mockListAccounts.mockReturnValue([
+      "auth-token",
+      "refresh-token",
+      "soma-anthropic-token1",
+      "soma-anthropic-token2",
+    ]);
+    const result = await listCredentials();
+    expect(result).toEqual([
+      "auth-token",
+      "refresh-token",
+      "soma-anthropic-token1",
+      "soma-anthropic-token2",
+    ]);
+    expect(mockListAccounts).toHaveBeenCalledWith("centient-auth", undefined);
+  });
+
+  it("passes the prefix through to the backend for filtering", async () => {
+    mockListAccounts.mockImplementation((_service: string, prefix?: string) => {
+      const all = ["auth-token", "soma-anthropic-token1", "soma-anthropic-token2"];
+      if (prefix === undefined) return all;
+      return all.filter((k) => k.startsWith(prefix));
+    });
+
+    const result = await listCredentials("soma-anthropic-");
+    expect(result).toEqual(["soma-anthropic-token1", "soma-anthropic-token2"]);
+    expect(result).not.toContain("auth-token");
+    expect(mockListAccounts).toHaveBeenCalledWith(
+      "centient-auth",
+      "soma-anthropic-",
+    );
+  });
+
+  it("returns keys only — never credential values", async () => {
+    mockListAccounts.mockReturnValue(["auth-token", "refresh-token"]);
+    const result = await listCredentials();
+
+    // Each entry is a plain string key, not an object with a value field.
+    for (const entry of result) {
+      expect(typeof entry).toBe("string");
+    }
+    // getStringFromKeychain must not have been invoked by listCredentials —
+    // values are retrieved on demand via getCredential() only.
+    expect(mockGetString).not.toHaveBeenCalled();
+  });
+
+  it("propagates enumeration failures from the backend", async () => {
+    mockListAccounts.mockImplementation(() => {
+      throw new Error("security dump-keychain failed");
+    });
+    await expect(listCredentials()).rejects.toThrow(
+      "security dump-keychain failed",
+    );
   });
 });
