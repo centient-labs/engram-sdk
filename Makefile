@@ -3,7 +3,7 @@ SUMMARY := . $(TOOLKIT)/common.sh && . $(TOOLKIT)/summary.sh
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install build lint test check clean publish
+.PHONY: help install build lint test check clean publish claudemd-check
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -39,6 +39,10 @@ publish: build check ## Publish to npm via changesets
 	pnpm changeset publish
 	git push origin main --tags
 
+claudemd-check: ## Check CLAUDE.md package table matches actual versions
+	@./scripts/check-claudemd-versions.sh
+
 # Changelog
 # 2026-04-04  Add build summary (run_summarized via release-toolkit)
 # 2026-04-14  Make `publish` target idempotent on already-versioned state
+# 2026-04-15  Add claudemd-check target + RELEASING.md
