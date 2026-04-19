@@ -39,6 +39,8 @@ The logger reserves these field names for its own top-level entry shape and stri
 
 > Prior to v1.0.0, `version` was silently reserved by the logger — any `version` in your context would be replaced with the logger-instance version (usually `"0.0.0"`). That reservation has been removed. See [issue #36](https://github.com/centient-labs/centient-sdk/issues/36).
 
+> **AuditWriter note:** `AuditWriter` (also exported from this package) emits its own top-level `version` field on emitted audit events. That value is the **audit-event schema version** maintained internally by the writer, not a user context field — distinct from the `Logger` reservation policy above. If you're reading raw audit records and see a `version` key, it's the audit schema, not anything the caller passed.
+
 ## API
 
 ### Logger

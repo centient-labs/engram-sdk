@@ -124,13 +124,21 @@ export class Logger implements ILogger {
       ...context,
     });
 
-    // Remove component/tool/service from context since they're reserved top-level
-    // fields. `version` is NOT reserved — callers are free to include it in
-    // context and it will appear in the emitted entry.
+    // Strip reserved top-level field names from user context so they can't
+    // override the logger-computed values. The spread order below (computed
+    // fields first, ...restContext last) means any key left in restContext
+    // would silently overwrite the computed value — this destructure enforces
+    // the reservation boundary. `version` is intentionally NOT reserved;
+    // callers own it.
     const {
       component: _c,
       tool: _t,
       service: _s,
+      timestamp: _ts,
+      level: _lv,
+      message: _msg,
+      pid: _p,
+      hostname: _h,
       ...restContext
     } = sanitizedContext;
 

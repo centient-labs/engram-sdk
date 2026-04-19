@@ -285,7 +285,7 @@ describe("formatPretty", () => {
 
     it("should render user-supplied `version` in the tail (unreserved in v1.0.0)", () => {
       // `version` is a user context field now, not a stripped top-level.
-      const entry = createTestEntry({ version: "2.3.4" } as Partial<LogEntry>);
+      const entry = createTestEntry({ version: "2.3.4" });
       const result = formatPretty(entry);
       expect(result).toContain("version=2.3.4");
     });
