@@ -58,26 +58,22 @@ Requires engram-server with `skipEmbedding` support on `PATCH /crystals/:id` (si
 
 **Older servers silently ignore the field** — the optimization becomes a no-op (embedding regenerates as before). Correctness is unaffected; only the compute saving is lost. This is intentional: it lets the SDK ship the optimization without coordinating a flag-day server upgrade.
 
-### Detecting support at runtime
+### Detecting support at runtime (currently no programmatic check)
 
-`client.checkCompatibility()` returns `{ compatible, serverVersion, minRequired }`:
+There is **no SDK-level way to confirm `skipEmbedding` is honored by the remote server** in the current release. The SDK's `client.checkCompatibility()` only verifies the server meets `MIN_SERVER_VERSION` (currently `0.30.0`, the CAS floor) — it says nothing about whether the server is at or past the `skipEmbedding`-capable release.
+
+Operators who need to verify `skipEmbedding` support today must inspect the server version manually against the engram-server#65 release tag:
 
 ```typescript
-const compat = await client.checkCompatibility();
-if (!compat.compatible) {
-  throw new Error(
-    `engram-server ${compat.serverVersion} is below required ${compat.minRequired}; ` +
-    `skipEmbedding may be a no-op. Upgrade to unlock the optimization.`,
-  );
-}
-// Note: `compatible: true` only means the server meets MIN_SERVER_VERSION
-// (currently 0.30.0 — the CAS floor). Once engram-server#65 ships, a
-// future SDK release will bump MIN_SERVER_VERSION to the skipEmbedding-
-// capable version. Until then, `skipEmbedding: true` is accepted and
-// forwarded but may be ignored by the server.
+const health = await fetch(`${baseUrl}/health`).then((r) => r.json());
+// Compare health.version against the engram-server release that lands
+// engram-server#65 (TBD). Until then, treat `skipEmbedding: true` as a
+// best-effort optimization that may be a no-op on older servers.
 ```
 
-The `MIN_SERVER_VERSION` constant in `@centient/sdk` will bump to the skipEmbedding-capable engram-server release once it ships. Track [engram-server#65](https://github.com/centient-labs/engram-server/issues/65) and [centient-sdk#35](https://github.com/centient-labs/centient-sdk/issues/35) for the coordinated release.
+Once engram-server#65 ships, a follow-up SDK release will bump `MIN_SERVER_VERSION` to the `skipEmbedding`-capable version. At that point `client.checkCompatibility()` becomes meaningful as a `skipEmbedding` gate. Track [engram-server#65](https://github.com/centient-labs/engram-server/issues/65) and [centient-sdk#35](https://github.com/centient-labs/centient-sdk/issues/35) for the coordinated release.
+
+Meanwhile: correctness is unaffected on any server. The optimization is just silently absent on servers pre-dating engram-server#65.
 
 ## What `skipEmbedding` does NOT do
 

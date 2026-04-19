@@ -575,15 +575,16 @@ describe("CrystalsResource", () => {
         skipEmbedding: true,
       });
 
-      // Order-independent assertion via parse + toMatchObject — matches the
-      // style used by the sibling tests in this block and by the expectedVersion
-      // tests at lines 495-503. Raw JSON.stringify comparison is brittle under
-      // any future field-ordering or undefined-filtering change.
-      const callUrl = mockFetch.mock.calls[0]![0];
-      const callInit = mockFetch.mock.calls[0]![1];
-      expect(callUrl).toBe("http://localhost:3100/v1/crystals/crystal-123");
-      expect(callInit.method).toBe("PATCH");
-      expect(JSON.parse(callInit.body)).toMatchObject({
+      // URL + method via `expect.objectContaining` — matches the established
+      // expectedVersion test at line 486. Body via `toEqual` on the parsed
+      // object — exact match (catches accidental extra fields), order-
+      // independent (not brittle under future field-ordering changes).
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3100/v1/crystals/crystal-123",
+        expect.objectContaining({ method: "PATCH" }),
+      );
+      const callBody = JSON.parse(mockFetch.mock.calls[0]![1].body);
+      expect(callBody).toEqual({
         contentInline: heartbeat,
         skipEmbedding: true,
       });
@@ -607,12 +608,20 @@ describe("CrystalsResource", () => {
       expect(callBody).toHaveProperty("skipEmbedding", false);
     });
 
-    it("should omit skipEmbedding when not supplied (backward compat)", async () => {
+    it("should omit skipEmbedding when explicitly set to undefined (documents absent-vs-undefined equivalence)", async () => {
+      // Callers who destructure an options object (e.g., `{...base, skipEmbedding: base.skipEmbedding}`)
+      // may pass `undefined`. `JSON.stringify` drops undefined values, so the
+      // wire body is identical to omitting the field. Pin this explicitly so
+      // a future undefined-preserving serializer change doesn't silently
+      // send `{"skipEmbedding": null}` or similar.
       const mockCrystal = createMockCrystal({ title: "Updated" });
       mockFetch = mockFetchResponse({ data: mockCrystal });
       vi.stubGlobal("fetch", mockFetch);
 
-      await client.crystals.update("crystal-123", { title: "Updated" });
+      await client.crystals.update("crystal-123", {
+        title: "Updated",
+        skipEmbedding: undefined,
+      });
 
       const callBody = JSON.parse(mockFetch.mock.calls[0]![1].body);
       expect(callBody).not.toHaveProperty("skipEmbedding");

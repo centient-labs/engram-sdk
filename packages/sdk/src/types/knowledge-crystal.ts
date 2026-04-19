@@ -297,8 +297,11 @@ export interface UpdateKnowledgeCrystalParams {
    * before — i.e. the optimization is a no-op against older servers, but
    * does not break correctness.
    *
-   * Default: `false` (regenerate embedding on every update — pre-`skipEmbedding`
-   * behavior).
+   * **Wire-format note:** when omitted, the server regenerates the embedding
+   * (pre-`skipEmbedding` behavior). Explicit `false` is forwarded to the
+   * server on the wire; whether it is semantically distinct from absent is
+   * server-defined. The SDK does not assume or enforce a default — it passes
+   * whatever the caller supplies.
    *
    * @see docs/skip-embedding.md
    */
