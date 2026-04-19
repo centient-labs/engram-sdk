@@ -279,6 +279,30 @@ export interface UpdateKnowledgeCrystalParams {
    * @see docs/optimistic-concurrency.md
    */
   expectedVersion?: number;
+  /**
+   * When `true`, the server commits this update without regenerating the
+   * crystal's embedding. The persisted embedding stays at its previous value,
+   * so subsequent semantic search returns the (now-stale) prior content.
+   *
+   * Use only for fields where the embedding is **meaningless** for semantic
+   * search — high-frequency status updates (heartbeats, lock holders, last-
+   * seen timestamps), counters, or numeric flags. Misuse on content-bearing
+   * fields silently degrades search quality without surfacing an error.
+   *
+   * Composes with `expectedVersion`: a single update may set both. CAS
+   * remains enforced; embedding is still skipped on success.
+   *
+   * Requires engram-server with `skipEmbedding` support on `PATCH /crystals/:id`.
+   * Older servers silently ignore the field and regenerate the embedding as
+   * before — i.e. the optimization is a no-op against older servers, but
+   * does not break correctness.
+   *
+   * Default: `false` (regenerate embedding on every update — pre-`skipEmbedding`
+   * behavior).
+   *
+   * @see docs/skip-embedding.md
+   */
+  skipEmbedding?: boolean;
 }
 
 // ============================================================================

@@ -560,6 +560,79 @@ describe("CrystalsResource", () => {
 
       expect(result.version).toBe(8);
     });
+
+    // skipEmbedding (#35) — high-frequency update optimization (ADR-017 OQ#2),
+    // depends on engram-server#65. SDK side just forwards the field; older
+    // servers silently ignore it.
+    it("should forward skipEmbedding: true in the PATCH body", async () => {
+      const mockCrystal = createMockCrystal({ title: "heartbeat" });
+      mockFetch = mockFetchResponse({ data: mockCrystal });
+      vi.stubGlobal("fetch", mockFetch);
+
+      await client.crystals.update("crystal-123", {
+        contentInline: JSON.stringify({ lastHeartbeat: "2026-04-19T18:00:00Z" }),
+        skipEmbedding: true,
+      });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3100/v1/crystals/crystal-123",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({
+            contentInline: JSON.stringify({ lastHeartbeat: "2026-04-19T18:00:00Z" }),
+            skipEmbedding: true,
+          }),
+        }),
+      );
+    });
+
+    it("should forward skipEmbedding: false explicitly when set", async () => {
+      // Explicit `false` is meaningful: it overrides any policy-default the
+      // server may apply for the route. Not the same as omitting.
+      const mockCrystal = createMockCrystal({ title: "Updated" });
+      mockFetch = mockFetchResponse({ data: mockCrystal });
+      vi.stubGlobal("fetch", mockFetch);
+
+      await client.crystals.update("crystal-123", {
+        title: "Updated",
+        skipEmbedding: false,
+      });
+
+      const callBody = JSON.parse(mockFetch.mock.calls[0]![1].body);
+      expect(callBody).toHaveProperty("skipEmbedding", false);
+    });
+
+    it("should omit skipEmbedding when not supplied (backward compat)", async () => {
+      const mockCrystal = createMockCrystal({ title: "Updated" });
+      mockFetch = mockFetchResponse({ data: mockCrystal });
+      vi.stubGlobal("fetch", mockFetch);
+
+      await client.crystals.update("crystal-123", { title: "Updated" });
+
+      const callBody = JSON.parse(mockFetch.mock.calls[0]![1].body);
+      expect(callBody).not.toHaveProperty("skipEmbedding");
+    });
+
+    it("should compose skipEmbedding with expectedVersion in the same PATCH", async () => {
+      // Both flags are independent and should appear together in the body.
+      // CAS still enforced server-side; embedding still skipped on success.
+      const mockCrystal = createMockCrystal({ title: "heartbeat", version: 8 });
+      mockFetch = mockFetchResponse({ data: mockCrystal });
+      vi.stubGlobal("fetch", mockFetch);
+
+      await client.crystals.update("crystal-123", {
+        contentInline: '{"hb":"now"}',
+        expectedVersion: 7,
+        skipEmbedding: true,
+      });
+
+      const callBody = JSON.parse(mockFetch.mock.calls[0]![1].body);
+      expect(callBody).toMatchObject({
+        contentInline: '{"hb":"now"}',
+        expectedVersion: 7,
+        skipEmbedding: true,
+      });
+    });
   });
 
   // ========================================================================
