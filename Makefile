@@ -3,7 +3,7 @@ SUMMARY := . $(TOOLKIT)/common.sh && . $(TOOLKIT)/summary.sh
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install build lint test check clean publish claudemd-check
+.PHONY: help install ensure-deps build lint test check clean publish claudemd-check
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -11,13 +11,21 @@ help: ## Show available targets
 install: ## Install dependencies
 	@$(SUMMARY) && run_summarized generic "pnpm install --frozen-lockfile" .logs/install.log
 
-build: ## Build all packages
+NODE_MODULES := node_modules/.package-lock.json
+
+$(NODE_MODULES): package.json pnpm-lock.yaml
+	@$(SUMMARY) && run_summarized generic "pnpm install --frozen-lockfile" .logs/install.log
+	@touch $@
+
+ensure-deps: $(NODE_MODULES) ## Install deps if missing (fast no-op otherwise)
+
+build: ensure-deps ## Build all packages
 	@$(SUMMARY) && run_summarized tsc "pnpm run build" .logs/build.log
 
-lint: ## Lint and typecheck
+lint: ensure-deps ## Lint and typecheck
 	@$(SUMMARY) && run_summarized tsc "pnpm run lint" .logs/lint.log
 
-test: ## Run tests
+test: ensure-deps ## Run tests
 	@$(SUMMARY) && run_summarized vitest "pnpm run test" .logs/test.log
 
 check: lint test ## Run full CI gate (lint + test)
@@ -48,3 +56,4 @@ claudemd-check: ## Check CLAUDE.md package table matches actual versions
 # 2026-04-14  Make `publish` target idempotent on already-versioned state
 # 2026-04-15  Add claudemd-check target + RELEASING.md
 # 2026-04-16  Add npm auth preflight check to `publish` target
+# 2026-04-20  Add ensure-deps sentinel (workspace convention)
