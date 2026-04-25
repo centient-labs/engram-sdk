@@ -293,6 +293,52 @@ describe("CrystalsResource — nodeType filter (ADR-055)", () => {
     expect(node.nodeType).toBe("collection");
     expect(node.title).toBe("Auth Patterns");
   });
+
+  it("client.crystals.related fetches edges from /related and unwraps the envelope", async () => {
+    const outgoing = createMockEdge({
+      id: "edge-out",
+      sourceId: "node-target",
+      targetId: "neighbour-1",
+      relationship: "related_to",
+    });
+    const incoming = createMockEdge({
+      id: "edge-in",
+      sourceId: "neighbour-2",
+      targetId: "node-target",
+      relationship: "depends_on",
+    });
+    mockFetch = mockFetchResponse({
+      data: [outgoing, incoming],
+      meta: { pagination: { total: 2, limit: 2, offset: 0, hasMore: false } },
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const result = await client.crystals.related("node-target");
+
+    const calledUrl = mockFetch.mock.calls[0][0] as string;
+    expect(calledUrl).toBe("http://localhost:3100/v1/crystals/node-target/related");
+
+    expect(result.edges).toHaveLength(2);
+    expect(result.total).toBe(2);
+    expect(result.hasMore).toBe(false);
+    expect(result.edges[0].id).toBe("edge-out");
+    expect(result.edges[1].id).toBe("edge-in");
+  });
+
+  it("client.crystals.related URL-encodes the crystal id", async () => {
+    mockFetch = mockFetchResponse({
+      data: [],
+      meta: { pagination: { total: 0, limit: 0, offset: 0, hasMore: false } },
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    await client.crystals.related("some/id with spaces");
+
+    const calledUrl = mockFetch.mock.calls[0][0] as string;
+    expect(calledUrl).toBe(
+      "http://localhost:3100/v1/crystals/some%2Fid%20with%20spaces/related"
+    );
+  });
 });
 
 // ============================================================================
